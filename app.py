@@ -330,19 +330,6 @@ def ganho_no_ponto(ponto, zeros, polos):
     return produto_polos / produto_zeros if produto_zeros > 1e-12 else np.inf
 
 
-def estimar_desempenho(ponto, ganho):
-    """Estimativa de 2a ordem (tempo de acomodacao / overshoot) a partir do polo dominante."""
-    if ponto.imag <= 1e-8 or ponto.real >= 0:
-        return None
-    wn = abs(ponto)
-    zeta = -ponto.real / wn
-    if zeta <= 0 or zeta >= 1:
-        return None
-    ts = 4.0 / (zeta * wn)
-    mp = np.exp(-zeta * np.pi / np.sqrt(1 - zeta ** 2)) * 100
-    return {"zeta": zeta, "wn": wn, "ts": ts, "mp": mp}
-
-
 # ------------------------------------------------------------------
 # Plotagem
 # ------------------------------------------------------------------
@@ -424,30 +411,30 @@ st.markdown("""
 with st.sidebar:
     st.header("Configuracao")
     exemplo_escolhido = st.selectbox("Exemplo pronto", list(EXEMPLOS.keys()))
-
     valores_padrao = EXEMPLOS[exemplo_escolhido] or ("1", "1 4 0", "1", "1")
 
-    st.subheader("G(s) = K · Ng(s) / Dg(s)")
-    txt_num_g = st.text_input("Numerador de G(s)", value=valores_padrao[0])
-    txt_den_g = st.text_input("Denominador de G(s)", value=valores_padrao[1])
+    with st.form("form_config"):
+        st.subheader("G(s) = K · Ng(s) / Dg(s)")
+        txt_num_g = st.text_input("Numerador de G(s)", value=valores_padrao[0])
+        txt_den_g = st.text_input("Denominador de G(s)", value=valores_padrao[1])
 
-    st.subheader("H(s) = Nh(s) / Dh(s)")
-    txt_num_h = st.text_input("Numerador de H(s)", value=valores_padrao[2])
-    txt_den_h = st.text_input("Denominador de H(s)", value=valores_padrao[3])
+        st.subheader("H(s) = Nh(s) / Dh(s)")
+        txt_num_h = st.text_input("Numerador de H(s)", value=valores_padrao[2])
+        txt_den_h = st.text_input("Denominador de H(s)", value=valores_padrao[3])
 
-    st.subheader("Ponto de teste")
-    parte_real = st.number_input("Parte real", value=0.0, format="%.4f")
-    parte_imag = st.number_input("Parte imaginaria", value=0.0, format="%.4f")
+        st.subheader("Ponto de teste")
+        parte_real = st.number_input("Parte real", value=0.0, format="%.4f")
+        parte_imag = st.number_input("Parte imaginaria", value=0.0, format="%.4f")
 
-    st.subheader("Limites do grafico")
-    limites_manuais = st.checkbox("Definir manualmente", value=False)
-    if limites_manuais:
-        x_min = st.number_input("x min", value=-10.0, format="%.2f")
-        x_max = st.number_input("x max", value=2.0, format="%.2f")
-        y_min = st.number_input("y min", value=-10.0, format="%.2f")
-        y_max = st.number_input("y max", value=10.0, format="%.2f")
+        st.subheader("Limites do grafico")
+        limites_manuais = st.checkbox("Definir manualmente", value=False)
+        if limites_manuais:
+            x_min = st.number_input("x min", value=-10.0, format="%.2f")
+            x_max = st.number_input("x max", value=2.0, format="%.2f")
+            y_min = st.number_input("y min", value=-10.0, format="%.2f")
+            y_max = st.number_input("y max", value=10.0, format="%.2f")
 
-    calcular = st.button("Calcular LGR", type="primary", use_container_width=True)
+        calcular = st.form_submit_button("Calcular LGR", type="primary", use_container_width=True)
 
 if calcular:
     st.session_state["pronto"] = True
@@ -482,13 +469,12 @@ ganho_calculado = ganho_no_ponto(ponto_teste, zeros, polos)
 
 st.markdown("---")
 
-abas = st.tabs([
-    "1. Eq. Caracteristica", "2. Forma Fatorada", "3. Polos/Zeros", "4. Eixo Real",
-    "5. Lugares", "6. Simetria", "7. Assintotas", "8. P. de Saída",
-    "9. Eixo Imaginario", "10. Angulos P/C", "11. Criterio Angulo", "12. Calculo de K",
-])
 
-with abas[0]:
+def _fs(largura, altura, escala):
+    return (largura * escala, altura * escala)
+
+
+def passo_1_equacao(escala=1.0):
     nG_l, dG_l = latex_polinomio(nG), latex_polinomio(dG)
     nH_l, dH_l = latex_polinomio(nH), latex_polinomio(dH)
     num_l, den_l = latex_polinomio(num), latex_polinomio(den)
@@ -498,11 +484,13 @@ with abas[0]:
     st.markdown("Equacao caracteristica:")
     st.latex(rf"1 + K \cdot P(s) = 0 \;\Longrightarrow\; {den_l} + K\left({num_l}\right) = 0")
 
-with abas[1]:
+
+def passo_2_fatorada(escala=1.0):
     st.latex(rf"P(s) = \frac{{{latex_fatorado(zeros)}}}{{{latex_fatorado(polos)}}}")
 
-with abas[2]:
-    fig, eixo = plt.subplots(figsize=(10, 6))
+
+def passo_3_polos_zeros(escala=1.0):
+    fig, eixo = plt.subplots(figsize=_fs(10, 6, escala))
     plotar_polos_zeros(eixo, polos, zeros)
     for i, p in enumerate(polos):
         eixo.annotate(rf"$p_{{{i+1}}}$", (p.real, p.imag), xytext=(8, 8),
@@ -528,8 +516,9 @@ with abas[2]:
         else:
             st.markdown("*Nenhum zero finito*")
 
-with abas[3]:
-    fig, eixo = plt.subplots(figsize=(10, 6))
+
+def passo_4_eixo_real(escala=1.0):
+    fig, eixo = plt.subplots(figsize=_fs(10, 6, escala))
     plotar_polos_zeros(eixo, polos, zeros)
     plotar_segmentos(eixo, segmentos, limite_x)
     finalizar_eixo(eixo, limite_x, limite_y, "Segmentos do eixo real no LGR", limites_usuario)
@@ -545,15 +534,18 @@ with abas[3]:
     else:
         st.info("Nenhum segmento do eixo real pertence ao LGR.")
 
-with abas[4]:
+
+def passo_5_lugares(escala=1.0):
     st.latex(rf"n_p = {len(polos)}, \quad n_z = {len(zeros)}")
     st.latex(rf"L_s = \max(n_p, n_z) = {n_lugares}")
 
-with abas[5]:
+
+def passo_6_simetria(escala=1.0):
     st.markdown("O LGR e **simetrico em relacao ao eixo real**: como os coeficientes do polinomio "
                 "sao reais, raizes complexas sempre aparecem em pares conjugados.")
 
-with abas[6]:
+
+def passo_7_assintotas(escala=1.0):
     if centroide is not None:
         n_asc = len(polos) - len(zeros)
         st.latex(rf"n_a = n_p - n_z = {n_asc}")
@@ -564,7 +556,7 @@ with abas[6]:
         for q, ang in enumerate(angulos_asc):
             st.latex(rf"q={q}: \;\; \phi_a = \frac{{(2\cdot{q}+1)\cdot180^\circ}}{{{n_asc}}} = {ang:.1f}^\circ")
 
-        fig, eixo = plt.subplots(figsize=(10, 6))
+        fig, eixo = plt.subplots(figsize=_fs(10, 6, escala))
         plotar_polos_zeros(eixo, polos, zeros)
         plotar_segmentos(eixo, segmentos, limite_x)
         plotar_assintotas(eixo, centroide, angulos_asc, limite_x, limite_y)
@@ -577,7 +569,8 @@ with abas[6]:
     else:
         st.latex(r"n_p = n_z \;\Rightarrow\; \text{sem assintotas}")
 
-with abas[7]:
+
+def passo_8_breakaway(escala=1.0):
     derivada_num, derivada_den = np.polyder(num), np.polyder(den)
     equacao_display = np.polysub(np.convolve(num, derivada_den), np.convolve(den, derivada_num))
     st.latex(r"K = -\frac{D(s)}{N(s)} \qquad \frac{dK}{ds}=0 \;\Rightarrow\; D'(s)N(s) - D(s)N'(s) = 0")
@@ -597,7 +590,7 @@ with abas[7]:
         elif ganho is not None and abs(ganho.imag) < 1e-6 and ganho.real > 0:
             st.latex(rf"s = {latex_complexo(raiz)}, \; K = {ganho.real:.4f} \;\; [\text{{no LGR}}]")
 
-    fig, eixo = plt.subplots(figsize=(10, 6))
+    fig, eixo = plt.subplots(figsize=_fs(10, 6, escala))
     plotar_polos_zeros(eixo, polos, zeros)
     plotar_segmentos(eixo, segmentos, limite_x)
     if centroide is not None:
@@ -614,7 +607,8 @@ with abas[7]:
     st.pyplot(fig)
     plt.close(fig)
 
-with abas[8]:
+
+def passo_9_eixo_imaginario(escala=1.0):
     tabela, grau, colunas = routh["tabela"], routh["grau"], routh["colunas"]
     linhas_latex = []
     for i in range(grau + 1):
@@ -643,7 +637,7 @@ with abas[8]:
     else:
         st.info("O LGR nao cruza o eixo imaginario para K > 0.")
 
-    fig, eixo = plt.subplots(figsize=(10, 6))
+    fig, eixo = plt.subplots(figsize=_fs(10, 6, escala))
     plotar_ramos_fundo(eixo, ramos_lgr)
     plotar_polos_zeros(eixo, polos, zeros)
     for k_val, w_val in cruzamentos:
@@ -655,7 +649,8 @@ with abas[8]:
     st.pyplot(fig)
     plt.close(fig)
 
-with abas[9]:
+
+def passo_10_angulos(escala=1.0):
     polos_cx = [p for p in polos if p.imag > 1e-8]
     zeros_cx = [z for z in zeros if z.imag > 1e-8]
     angulos_partida, angulos_chegada = {}, {}
@@ -679,7 +674,7 @@ with abas[9]:
                 st.latex(rf"z_k = {latex_complexo(zk)}: \;\; \theta_a = {theta % 360:.2f}^\circ")
                 angulos_chegada[zk] = theta
 
-        fig, eixo = plt.subplots(figsize=(10, 7))
+        fig, eixo = plt.subplots(figsize=_fs(10, 7, escala))
         plotar_ramos_fundo(eixo, ramos_lgr)
         plotar_polos_zeros(eixo, polos, zeros)
         conjunto = np.concatenate([polos, zeros]) if len(zeros) > 0 else polos
@@ -699,16 +694,23 @@ with abas[9]:
     else:
         st.info("Sem polos/zeros complexos — este passo nao se aplica.")
 
-with abas[10]:
+
+def passo_11_criterio_angulo(escala=1.0):
     st.latex(r"\sum \angle(s_0 - z_j) - \sum \angle(s_0 - p_i) = \pm 180^\circ(2q+1)")
     st.markdown(f"**Ponto de teste:** $s_0 = {latex_complexo(ponto_teste)}$")
     st.latex(rf"\Delta\theta = {delta_angulo:.2f}^\circ \;\to\; \text{{normalizado}} = {delta_normalizado % 360:.2f}^\circ")
     if pertence:
         st.success(f"O ponto **pertence** ao LGR.")
     else:
-        st.warning(f"O ponto **nao pertence** ao LGR.")
+        desvio = abs(abs(delta_normalizado) - 180)
+        st.warning(
+            f"O ponto **nao pertence** ao LGR: pelo criterio do angulo, a soma "
+            f"$\\Delta\\theta$ precisa ser $\\pm180^\\circ$ (multiplo impar), mas aqui "
+            f"$\\Delta\\theta = {delta_normalizado:.2f}^\\circ$, um desvio de "
+            f"**{desvio:.2f}°** em relacao a 180°."
+        )
 
-    fig, eixo = plt.subplots(figsize=(10, 6))
+    fig, eixo = plt.subplots(figsize=_fs(10, 6, escala))
     plotar_polos_zeros(eixo, polos, zeros)
     cor = PALETA["aceito"] if pertence else PALETA["rejeitado"]
     marcador = "*" if pertence else "X"
@@ -725,36 +727,74 @@ with abas[10]:
     st.pyplot(fig)
     plt.close(fig)
 
-with abas[11]:
+
+def passo_12_calculo_k(escala=1.0):
     st.latex(r"K = \frac{\prod_i |s_0 - p_i|}{\prod_j |s_0 - z_j|}")
     produto_polos = np.prod([abs(ponto_teste - p) for p in polos]) if len(polos) else 1.0
     produto_zeros = np.prod([abs(ponto_teste - z) for z in zeros]) if len(zeros) else 1.0
     st.latex(rf"K = \frac{{{produto_polos:.4f}}}{{{produto_zeros:.4f}}} = {ganho_calculado:.4f}")
 
-    coluna_a, coluna_b, coluna_c = st.columns(3)
+    coluna_a, coluna_b = st.columns(2)
     coluna_a.metric("K neste ponto", f"{ganho_calculado:.4f}")
     coluna_b.metric("Pertence ao LGR?", "Sim" if pertence else "Nao")
 
-    desempenho = estimar_desempenho(ponto_teste, ganho_calculado)
-    if desempenho:
-        coluna_c.metric("ζ (amortecimento)", f"{desempenho['zeta']:.3f}")
-        st.markdown("**Estimativa de desempenho (aproximacao de 2a ordem, polo dominante):**")
-        st.latex(rf"\zeta = {desempenho['zeta']:.4f}, \quad \omega_n = {desempenho['wn']:.4f}\;\text{{rad/s}}")
-        st.latex(rf"t_s \approx \frac{{4}}{{\zeta\omega_n}} = {desempenho['ts']:.4f}\;\text{{s}}, "
-                 rf"\quad M_p \approx {desempenho['mp']:.2f}\%")
+    if pertence:
+        st.success(rf"O ponto pertence ao LGR. $K = {ganho_calculado:.6f}$")
     else:
-        st.caption("Estimativa de desempenho disponivel apenas para polos complexos no semiplano esquerdo.")
+        st.warning(rf"O ponto nao pertence ao LGR. $K = {ganho_calculado:.6f}$ (valor de referencia)")
+
+
+def grafico_lgr_completo(escala=1.0):
+    fig, eixo = plt.subplots(figsize=_fs(6, 4.2, escala))
+    for coluna in range(ramos_lgr.shape[1]):
+        ramo = ramos_lgr[:, coluna]
+        eixo.plot(ramo.real, ramo.imag, "-", color=PALETA["lgr"], linewidth=2, alpha=0.85)
+    plotar_polos_zeros(eixo, polos, zeros)
+    if centroide is not None:
+        eixo.plot(centroide, 0, "+", ms=10, mew=2, color=PALETA["destaque"], label=f"Centroide ({centroide:.2f})")
+    finalizar_eixo(eixo, limite_x, limite_y, "Lugar Geometrico das Raizes", limites_usuario)
+    fig.tight_layout()
+    return fig
+
+
+PASSOS = [
+    ("1. Equacao Caracteristica", passo_1_equacao),
+    ("2. Forma Fatorada", passo_2_fatorada),
+    ("3. Polos e Zeros", passo_3_polos_zeros),
+    ("4. Eixo Real", passo_4_eixo_real),
+    ("5. Numero de Lugares", passo_5_lugares),
+    ("6. Simetria", passo_6_simetria),
+    ("7. Assintotas", passo_7_assintotas),
+    ("8. Pontos de Saída/Entrada", passo_8_breakaway),
+    ("9. Eixo Imaginario", passo_9_eixo_imaginario),
+    ("10. Angulos de Partida/Chegada", passo_10_angulos),
+    ("11. Criterio de Angulo", passo_11_criterio_angulo),
+    ("12. Calculo de K", passo_12_calculo_k),
+]
+
+titulos_abas = [
+    "1. Eq. Caracteristica", "2. Forma Fatorada", "3. Polos/Zeros", "4. Eixo Real",
+    "5. Lugares", "6. Simetria", "7. Assintotas", "8. P. de Saída",
+    "9. Eixo Imaginario", "10. Angulos P/C", "11. Criterio Angulo", "12. Calculo de K",
+    "📄 Relatório Completo",
+]
+abas = st.tabs(titulos_abas)
+
+for aba, (_, funcao) in zip(abas[:12], PASSOS):
+    with aba:
+        funcao()
+
+with abas[12]:
+    st.caption("Use Ctrl+P / Cmd+P (ou Arquivo > Imprimir) para gerar um PDF ou imprimir esta pagina inteira.")
+    for titulo, funcao in PASSOS:
+        st.markdown(f"#### {titulo}")
+        funcao(escala=1.0)
+        st.markdown("---")
 
 st.markdown("---")
 st.subheader("Grafico completo do LGR")
-fig, eixo = plt.subplots(figsize=(10, 7))
-for coluna in range(ramos_lgr.shape[1]):
-    ramo = ramos_lgr[:, coluna]
-    eixo.plot(ramo.real, ramo.imag, "-", color=PALETA["lgr"], linewidth=2.5, alpha=0.85)
-plotar_polos_zeros(eixo, polos, zeros)
-if centroide is not None:
-    eixo.plot(centroide, 0, "+", ms=12, mew=2, color=PALETA["destaque"], label=f"Centroide ({centroide:.2f})")
-finalizar_eixo(eixo, limite_x, limite_y, "Lugar Geometrico das Raizes", limites_usuario)
-fig.tight_layout()
-st.pyplot(fig)
-plt.close(fig)
+coluna_grafico, _ = st.columns([2, 1])
+with coluna_grafico:
+    fig_completo = grafico_lgr_completo(escala=1.0)
+    st.pyplot(fig_completo, width="content")
+    plt.close(fig_completo)
